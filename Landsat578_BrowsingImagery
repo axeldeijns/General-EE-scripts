@@ -1,0 +1,55 @@
+//define variables
+var Date1 = ('1985-01-01');
+var Date2 = ('1986-01-01');
+
+// Import Landsat 5,7,8
+var landsat5a = ee.ImageCollection('LANDSAT/LT05/C01/T1_SR');
+var landsat5b = ee.ImageCollection("LANDSAT/LT05/C01/T2_SR");
+var landsat7 = ee.ImageCollection("LANDSAT/LE07/C01/T1_SR");
+var landsat8 = ee.ImageCollection("LANDSAT/LC08/C01/T1_SR");
+
+// Function to scale surface reflectance values (see image collection metadata for scaling factors)
+var srScale = function(img){
+ img = img.addBands(img.select(['blue', 'green', 'red', 'nir', 'swir1', 'swir2']).multiply(0.0001))//.unitScale(0,1)
+ img = img.addBands(img.select(['tir']).multiply(0.1));
+ return img.select(['blue_1', 'green_1', 'red_1', 'nir_1', 'swir1_1', 'swir2_1','tir_1'],['blue', 'green', 'red', 'nir', 'swir1', 'swir2','tir'])}
+
+//Define the different landsat satellite collections merge them and scale reflectance values
+var bandlist = ee.List(['B1','B2','B3','B4','B5','B6','B7']);
+var changelist = ee.List(['blue', 'green', 'red', 'nir', 'swir1','tir', 'swir2']);
+
+var ls578 = landsat5a.merge(landsat5b).merge(landsat7)
+  .select(bandlist,changelist)
+  .map(srScale)
+
+var bandlist = ee.List(['B2','B3','B4','B5','B6','B7','B10']);
+var changelist = ee.List(['blue', 'green', 'red', 'nir', 'swir1', 'swir2','tir']);
+
+var ls8 = landsat8
+  .select(bandlist,changelist)
+  .map(srScale)
+
+var filteredCollection = ee.ImageCollection(ls578.merge(ls8))
+var fc = filteredCollection.filterBounds(geometry).filterDate(Date1,Date2).sort('SENSING_TIME');
+var listOfImages = fc.toList(400).getInfo();
+
+
+
+// image visualistion -- Choose one
+var SNR = ({bands: ['swir2','nir','red'], min: 0, max: 0.3});
+var RGB = ({bands: ['red','green','blue'], min: 0, max: 0.2});
+var visual = RGB;
+
+// ------------------------------------------------------------------------------------------------------- //
+//  Loop to add Images (very SLOW)
+// ------------------------------------------------------------------------------------------------------- //
+
+  for(var i = 1; i<listOfImages.length; i++)
+    {
+      var lisDate = ee.Image(listOfImages[i].id).get('system:time_start');
+      var img = fc.filterMetadata('system:time_start','equals',lisDate).first();
+      var date = ee.Date(img.get('system:time_start')).format('yyyyMMMdd');
+      // print(i)
+      Map.addLayer(ee.Image(img), visual, date.getInfo(), false);
+    }
+
